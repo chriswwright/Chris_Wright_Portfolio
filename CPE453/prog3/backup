@@ -1,0 +1,78 @@
+from page_table import *
+from tlb import tlb
+from memory import memory
+
+'''
+Simulates a memory with TLB and paging, reading from a binary
+input file
+inputs:
+  ref_sequence: Filename that contains the list of memory addresses
+                that will be used for the memory access.
+  frames: the number of frames in physical memory.
+  pra: page replacement algorithm. 0 = FIFO, 1 = LRU, 2 = OPT
+'''
+def memSim(ref_sequence, frames = 256, pra = 0):
+    #split values from the file ref_sequence
+    page_list = [];
+    offset_list = [];
+     
+    sequence = open("ref_sequence", "r")
+
+    
+
+    #Memory structure creation
+    tlb = tlb()
+    page_table = page_table(pra)
+    sec_mem = open("BACKING_STORE.BIN", "rb")
+    phys_mem = memory(sec_mem, frames)
+    num_tlb_miss = 0
+    num_page_fault = 0
+
+    #memory unit main loop
+     while len(pages) != 0:
+        tlb_miss = False
+        page_fault = False
+        page_num = page_list[0]
+        offset = offset_list[0]
+        page_backup = page_list
+        offset_backup = offset_list
+        page_backup.pop()
+        offset_backup.pop()
+
+        #check for tlb hit
+        frame_number = tlb.get(page_num)
+        if frame_number == -1:
+            num_tlb_miss += 1
+        
+        #check for page_table hit
+            frame_number = page_table.get_page(page_num)
+        if frame_number == -1:
+
+            #page fault
+            num_page_fault += 1
+            if memory.size == memory.max_size:
+                #page replacement
+                target_info = page_table.void_page()
+                tlb.void(target_info[0])
+                memory.swap_data(page_num, target_info[1])
+                page_table.load_page(page_num, target_info[1])
+                tlb.load(page_num, target_info[1])
+
+                
+            else:
+                #page load
+                frame_number = memory.append(page_number)
+                page_table.load_page(page_number, frame_number)
+                tlb.load(page_number, frame_number)
+
+        else:
+            #write out to file
+            print(str(256*page_num+offset) + ", " + " value" + ", " + str(frame_number) + ", " + "Hex")    
+            page_list = page_backup
+            offset_list = offset_backup
+
+
+    return 0
+
+if __name__ == '__main__':
+    memSim()

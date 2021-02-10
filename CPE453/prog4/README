@@ -1,0 +1,112 @@
+Chris Wright, Brandon Nowak
+
+Explination of general tinyFS effectiveness
+
+  If the user stays within the limits of the system, as defined below, this
+  system should work well enough. We ran into a number of system based
+  limitations that conflicted with our libTinyFS implementation - namely the
+  limit on maximum number of blocks loaded into memory. This limitation is what
+  defines the maximum blocksize, disksize and filesize at 512 bytes and 65535
+  bytes repsectively. The unix servers have limited the maximum number of
+  contiguous blocks one program has loaded in memory at 64 blocks of 1024 bytes
+  in size - as shown using the command "ulimit -l". This is because of how we
+  read files - for simplicity's sake we decided to buffer the entire file in
+  memory while reading, instead of chunks of it at a time. This is effective for
+  small/medium sized files (<5kB) but has an upper limit based on how many
+  blocks one program is allowed to load into memory. While we could reprogram
+  our code to account for this eventuality, that would require a rewrite of a
+  significant portion of libTinyFS.c. Said rewrite would also include much more
+  complicated logic, meaning that code would be more susseptible to
+  errors. There are workaround for these limits - namely if want to use a larger
+  blocksize, you must have a lower blockcount, and the max filesize is
+  non-negotiable.
+
+  In a less extreme use case there are a number of significant limitations.
+  Using the standard blocksize of 256 bytes, the maximum filesize is 215
+  blocks. This is because the first 40 bytes of our inode is used to store the
+  file's metadata. This means that bytes 51-255 are then avalible to point to
+  various data extent blocks, which store that file's data. We can also only
+  store (Number of blocks on disk - 1)/2 number of files. This is tied to the
+  fact that for this implementation, each file requires at least one extent
+  block in order to be stored. We made this choice in order to not have to code
+  a seperate variation of inode block which stores data. This simplifies our
+  code and made it easier to understand. Also, the choice to use indexed
+  allocation mildly limits the filesize of a particular system - because each
+  data extent block requires 4 bytes as a header, we have to store in multiples
+  of Blocksize - 4 bytes. However this allows us to avoid most fragmentation
+  issues. External fragmentation is avoided because our disk is discontigous. We
+  also do not support seeking past the end of a file, which helps with security
+  as well as not supporting writing null bytes through tfs_writeFile, which had
+  potential to expose a stack overflow exploit. However, we do support the
+  reading and writing of null bytes through tfs_readByte and tfs_writeByte. This
+  essentially fixes internal framgentation by making preventing it the impetus
+  of the user. Any null byte writen by the user will be assumed to be
+  significant. Thus internal fragmentation becomes not the file systems
+  responsibility. Indexed allocation also helps with file security - if one
+  block is corrupted the entire file system is not lost like it might be if we
+  had used a linked allocation, or something similar.
+
+  We have another choice and drawback to do with buffering the file data to be
+  read from. The file data is buffered on the first read on a file descriptor,
+  and then it is only reread when that file descriptor is written to with
+  tfs_write or tfs_writeByte. This allows two seprate functions to be reading
+  from the same file and not directly affect one another. If both functions try
+  and write to the same file with different data, the behavior is undefined.
+  However, if only one function writes to the file, this does not effect another
+  function that may have been relying on the file's data from before it was
+  overwritten. Ideally we'd have some function avalible to the user that allows
+  them to re-read a file's buffer from the disk when they want to, but considering
+  how we've been asked to not add excess functionality to libTinyFS, this is a
+  known limitation of TinyFS.
+
+Explination of additional functionlity
+
+  For our additional functionality, we decided to implement RO protection and
+  timestamp metadata. The Timestamp metadata was rather easy for us to
+  implement. Before this implementation, we were only using 14 bytes in the
+  inode. Considering that on the unix CSC servers (and in most 64 bit systems)
+  time_t (as used in time.h) is an 8 byte value, we provided 8 bytes of storage
+  for each creation time, last read time, and last write time. Using the time()
+  function allowed us to pull the current system time on creation, reading and
+  writing to the file, wherein we updated the approrpiate bytes of the inode
+  associated with that file. Our functions for reading this information return a
+  time_t as well. This is because that allows the user to use the functionality
+  (such as ctime) provided in time.h, and get sensible output. The Read only
+  protection was accomplished using a byte which we had allocated with the
+  expectation of using it to implement hirearchical directories. This byte, the
+  INODE_TYPE byte is used to determine the type of the file, and is checked when
+  writing to or deleting a file. tfs_writeByte was also implemented, as required
+  by the spec.
+
+  This functionality was explored on a surface level through tinyFSDemo. the
+  time functionality was explored through the fact that this file needs to be
+  run 3 times in order to demonstrate our file system's functionality. The first
+  time (assuming a new disk) this function writes two files to the disk - afile
+  and bfile. afile is 500 bytes long, while bfile is 10 blocks long. Before
+  finishing this stage of the program, the demo sets afile and bfile to Read
+  only. The second time the demo is run, the file reads from both afile and
+  bfile, outputing the contents of the file to stdout. It then tries to delete
+  afile, which subsequently fails becasue afile is read only. it also tries to
+  write to bfile, which also fails because bfile is readonly. The demo then sets
+  afile and bfile back to Read/write. In afile it seeks to offset 400, then
+  writs 200 '!'  characters using tfs_writeByte. This requires a new extent
+  block to be allcated, which then shows up past the end of where bfile is
+  stored. the demo writes 256 '5' characters to the start of bfile before
+  finishing. In the third run of this demo, afile and bfile are both read, then
+  deleted. from the disk. During the second and third run of the demo, the
+  metadata for afile and bfile are output to stdout, allowing the user to see
+  the times chage as they are pulled from the inode block.
+
+Limitiations:
+  Max Disksize (blocks): 256 Blocks
+  Max Disksize (bytes): 65535
+  Min Disksize: 3 Blocks
+  Max Number of Files: (Number of Blocks on the disk - 1) / 2
+  Min Filesize (blocks): 0 (If the file is never written to)
+  Max Filesize (blocks): Blocksize - 40 or 254 blocks, whichever is smaller
+  Max Filesize (bytes): (Max Filesize in blocks) * (Blocksize - 4) OR 65535 bytes, whichever is smaller
+  Min Blocksize: 70 Bytes
+  Max Blocksize: 512 Bytes (tied to maximum number of contigous blocks allowed to be loaded into memory by the system)
+
+Bugs:
+  Other than the limitations listed above, we know not, of any more bugs.

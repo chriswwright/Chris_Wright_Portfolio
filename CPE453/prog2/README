@@ -1,0 +1,16 @@
+Program 2 README
+
+Name of both partners:
+Chris Wright (cwrigh30@calpoly.edu)
+Brandon Nowak (bjnowak@calpoly.edu)
+
+This first major difference between this lwp library and a real thread
+management library is that the kernel never learns about new threads. This means
+that multicore operation is impossible. Another thing is that once the lwp
+starts, the starting process is not a thread itself. This means that the
+starting process stops while the lwps are running meaning that the main process
+cannot tell its threads to stop or change mode. Similarly our threads cannot
+communicate with each other or the main process meaning they cannot try and
+access the same reasources. Finally there is no process for creating shared
+memory between threads. This is problem for single instruction, multiple data
+applications, which are a major application of thread control libraries. 
